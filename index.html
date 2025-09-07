@@ -1,0 +1,382 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="description" content="Online FM Radio with live streaming">
+    <title>Online FM Radio 📻</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f3f4f6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            color: #1f2937;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            max-width: 400px;
+            width: 100%;
+            flex-grow: 1;
+        }
+        .ad-space {
+            background: #e5e7eb;
+            width: 100%;
+            max-width: 400px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            position: relative;
+        }
+        .ad-carousel {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+        .ad-item {
+            min-width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.5s ease-in-out;
+        }
+        .ad-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        h1 {
+            font-size: 1.8rem;
+            color: #1e40af;
+            margin-bottom: 20px;
+        }
+        .player {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 0;
+        }
+        .station-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #1e40af;
+        }
+        audio {
+            width: 100%;
+            margin-top: 20px;
+            outline: none;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        button {
+            background-color: #1e40af;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #1e3a8a;
+        }
+        .offline-message {
+            display: none;
+            color: #dc2626;
+            margin-top: 20px;
+        }
+        .dropdown-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 0;
+        }
+        .dropdown-container label {
+            font-family: 'Roboto', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: #1e40af;
+            margin-right: 10px;
+            line-height: 2.5;
+        }
+        .dropdown-container select {
+            padding: 10px;
+            font-size: 1rem;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            background-color: #ffffff;
+            color: #1f2937;
+            cursor: pointer;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            width: 180px;
+            max-width: 100%;
+        }
+        .dropdown-container select:focus {
+            outline: none;
+            border-color: #1e40af;
+            box-shadow: 0 0 5px rgba(30, 64, 175, 0.5);
+        }
+        .dropdown-container select option {
+            background-color: #ffffff;
+            color: #1f2937;
+        }
+        .footer {
+            text-align: center;
+            padding: 10px;
+            font-size: 0.9rem;
+            color: #6b7280;
+            width: 100%;
+            background-color: #f3f4f6;
+            margin-top: 0;
+        }
+        @media screen and (max-width: 600px) {
+            .dropdown-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            .dropdown-container label {
+                margin-right: 0;
+                margin-bottom: 5px;
+            }
+            .dropdown-container select {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="ad-space">
+        <div class="ad-carousel" id="adCarousel">
+            <div class="ad-item"><img src="D:\fm\ad1.jpeg" alt="Ad 1 📢"></div>
+            <div class="ad-item"><img src="D:\fm\ad2.jpeg" alt="Ad 2 📢"></div>
+            <div class="ad-item"><img src="D:\fm\ad3.jpeg" alt="Ad 3 📢"></div>
+            <div class="ad-item"><img src="D:\fm\ad4.jpeg" alt="Ad 4 📢"></div>
+            <div class="ad-item"><img src="D:\fm\ad5.jpeg" alt="Ad 5 📢"></div>
+        </div>
+    </div>
+    <div class="container">
+         <p style="font-family: Comic Sans MS; font-size: 30px; font-style: bold; color: rgb(15, 232, 58);">Muvin Star</p>
+        <h1> Online FM Radio 📻</h1>
+        <div class="dropdown-container">
+            <label for="languageSelect">Select Language: 🌐</label>
+            <select id="languageSelect">
+                <!-- Language options will be populated by JavaScript -->
+            </select>
+            <label for="stationSelect">Select FM Station: 🎵</label>
+            <select id="stationSelect" style="display: none;">
+                <!-- Station options will be populated by JavaScript -->
+            </select>
+        </div>
+        <div class="player">
+            <div class="station-name" id="stationName">Select a station 🎧</div>
+            <audio id="radioPlayer" controls>
+                <source id="audioSource" src="" type="audio/mpeg">
+                Your browser does not support the audio element.
+            </audio>
+            <div class="controls">
+                <button onclick="togglePlay()">Play/Pause ▶️⏸️</button>
+            </div>
+            <p class="offline-message" id="offlineMessage">You are offline. Please check your connection. 📡</p>
+        </div>
+    </div>
+    <div class="footer">
+        &copy; 2025 Mr. S. Oyyathevan | All Rights Reserved 🛡️
+    </div>
+    <script>
+        // Sample language and station data (replace with your actual data)
+        const languages = [
+            {
+                name: "English 🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+                stations: [
+                    { name: "English FM 1 🎶", url: "YOUR_ENGLISH_STREAM_URL_1_HERE" },
+                    { name: "English FM 2 🎶", url: "YOUR_ENGLISH_STREAM_URL_2_HERE" }
+                ]
+            },
+            {
+                name: "Hindi 🇮🇳",
+                stations: [
+                    { name: "Hindi FM 1 🎶", url: "YOUR_HINDI_STREAM_URL_1_HERE" },
+                    { name: "Hindi FM 2 🎶", url: "YOUR_HINDI_STREAM_URL_2_HERE" }
+                ]
+            },
+            {
+                name: "Tamil 🌴",
+                stations: [
+                { name: "Kodai City FM", url: "https://strw3.openstream.co/786?aw_0_1st.collectionid%3D6812%26stationId%3D6812%26publisherId%3D810%26k%3D1757253843" },
+            { name: "Suryan FM 93.5", url: "https://radios.crabdance.com:8002/2" },
+            { name: "Radio Mirchi Tamil FM 98.3", url: "https://radios.crabdance.com:8002/3" },
+            { name: "Radio Mirchi Tamil FM 98.3", url: "https://radios.crabdance.com:8002/3" }
+                ]
+            }
+        ];
+
+        // Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker Registered'))
+                    .catch(err => console.log('Service Worker Error:', err));
+            });
+        }
+
+        // Ad Carousel
+        const adCarousel = document.getElementById('adCarousel');
+        const adItems = document.getElementsByClassName('ad-item');
+        let currentAdIndex = 0;
+        const adInterval = 5000; // 5 seconds
+
+        function showNextAd() {
+            currentAdIndex = (currentAdIndex + 1) % adItems.length;
+            adCarousel.style.transform = `translateX(-${currentAdIndex * 100}%)`;
+        }
+
+        setInterval(showNextAd, adInterval);
+
+        // Audio Player Control
+        const player = document.getElementById('radioPlayer');
+        const audioSource = document.getElementById('audioSource');
+        const offlineMessage = document.getElementById('offlineMessage');
+        const stationNameDisplay = document.getElementById('stationName');
+        const languageSelect = document.getElementById('languageSelect');
+        const stationSelect = document.getElementById('stationSelect');
+
+        // Populate language dropdown
+        function populateLanguageDropdown() {
+            languages.forEach((language, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = language.name;
+                languageSelect.appendChild(option);
+            });
+        }
+
+        // Populate station dropdown based on selected language
+        function populateStationDropdown(languageIndex) {
+            stationSelect.innerHTML = '<option value="">Select a station 🎧</option>';
+            const language = languages[languageIndex];
+            language.stations.forEach((station, stationIndex) => {
+                const option = document.createElement('option');
+                option.value = stationIndex;
+                option.textContent = station.name;
+                option.dataset.url = station.url;
+                stationSelect.appendChild(option);
+            });
+            stationSelect.style.display = 'block';
+        }
+
+        // Select language
+        languageSelect.addEventListener('change', () => {
+            const languageIndex = languageSelect.value;
+            if (languageIndex !== '') {
+                populateStationDropdown(languageIndex);
+                stationSelect.value = '';
+                stationNameDisplay.textContent = 'Select a station 🎧';
+                audioSource.src = '';
+                player.load();
+                player.pause();
+            } else {
+                stationSelect.style.display = 'none';
+            }
+        });
+
+        // Select and play a station
+        stationSelect.addEventListener('change', () => {
+            const languageIndex = languageSelect.value;
+            const stationIndex = stationSelect.value;
+            if (stationIndex !== '') {
+                const station = languages[languageIndex].stations[stationIndex];
+                audioSource.src = station.url;
+                stationNameDisplay.textContent = station.name;
+                player.load();
+                togglePlay();
+            }
+        });
+
+        // Play/Pause toggle
+        function togglePlay() {
+            if (player.paused) {
+                player.play().catch(err => {
+                    console.error('Playback failed:', err);
+                    offlineMessage.style.display = 'block';
+                });
+            } else {
+                player.pause();
+            }
+        }
+
+        // Handle Online/Offline Status
+        function updateOfflineStatus() {
+            offlineMessage.style.display = navigator.onLine ? 'none' : 'block';
+        }
+
+        window.addEventListener('online', updateOfflineStatus);
+        window.addEventListener('offline', updateOfflineStatus);
+
+        // Initialize offline status on page load
+        window.addEventListener('load', updateOfflineStatus);
+
+        // Initialize
+        populateLanguageDropdown();
+    </script>
+</body>
+</html>
