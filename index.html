@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -48,158 +9,244 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="icon-192x192.png">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
+        /* Modern and vibrant styling */
+        * {
             margin: 0;
-            font-family: Arial, sans-serif;
-            background-color: #f3f4f6;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%);
             display: flex;
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
             color: #1f2937;
+            overflow-x: hidden;
         }
+
         .container {
             text-align: center;
             padding: 20px;
-            max-width: 400px;
+            max-width: 450px;
             width: 100%;
             flex-grow: 1;
         }
+
+        /* Enhanced Ad Carousel */
         .ad-space {
-            background: #e5e7eb;
             width: 100%;
-            max-width: 400px;
-            height: 100px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 450px;
+            height: 180px;
+            margin: 20px 0;
+            border-radius: 15px;
             overflow: hidden;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
             position: relative;
+            background: #ffffff;
         }
+
         .ad-carousel {
             display: flex;
             width: 100%;
             height: 100%;
+            transition: transform 0.5s ease-in-out;
         }
+
         .ad-item {
             min-width: 100%;
             height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: transform 0.5s ease-in-out;
         }
+
         .ad-item img {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            transition: transform 0.3s ease;
         }
+
+        .ad-item img:hover {
+            transform: scale(1.05);
+        }
+
+        /* Header Styling */
         h1 {
-            font-size: 1.8rem;
+            font-size: 2rem;
+            font-weight: 700;
             color: #1e40af;
             margin-bottom: 20px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        .player {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-bottom: 0;
-        }
-        .station-name {
-            font-size: 1.2rem;
-            font-weight: bold;
+
+        .brand {
+            font-family: 'Poppins', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: #14b8a6;
             margin-bottom: 10px;
-            color: #1e40af;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
+
+        /* Player Card */
+        .player {
+            background: #ffffff;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+            margin-bottom: 20px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .player:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .station-name {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 15px;
+        }
+
         audio {
             width: 100%;
-            margin-top: 20px;
+            margin-top: 15px;
+            border-radius: 10px;
             outline: none;
         }
+
+        audio::-webkit-media-controls-panel {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+
         .controls {
             margin-top: 20px;
         }
+
         button {
-            background-color: #1e40af;
-            color: white;
+            background: linear-gradient(90deg, #1e40af, #7c3aed);
+            color: #ffffff;
             border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
+            padding: 12px 24px;
+            border-radius: 25px;
             font-size: 1rem;
+            font-weight: 600;
             cursor: pointer;
-            transition: background-color 0.3s;
+            transition: background 0.3s ease, transform 0.2s ease;
         }
+
         button:hover {
-            background-color: #1e3a8a;
+            background: linear-gradient(90deg, #1e3a8a, #6d28d9);
+            transform: scale(1.05);
         }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
         .offline-message {
             display: none;
             color: #dc2626;
-            margin-top: 20px;
+            font-size: 0.9rem;
+            margin-top: 15px;
+            font-weight: 500;
         }
+
+        /* Dropdown Styling */
         .dropdown-container {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 15px;
             justify-content: center;
-            margin-bottom: 0;
+            margin-bottom: 20px;
         }
+
         .dropdown-container label {
-            font-family: 'Roboto', sans-serif;
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             font-weight: 500;
             color: #1e40af;
-            margin-right: 10px;
             line-height: 2.5;
         }
+
         .dropdown-container select {
-            padding: 10px;
+            padding: 12px;
             font-size: 1rem;
-            border: 1px solid #d1d5db;
-            border-radius: 5px;
-            background-color: #ffffff;
+            border: 2px solid #1e40af;
+            border-radius: 10px;
+            background: #ffffff;
             color: #1f2937;
             cursor: pointer;
-            transition: border-color 0.3s, box-shadow 0.3s;
-            width: 180px;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            width: 200px;
             max-width: 100%;
+            appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="%231e40af" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 10px center;
         }
+
         .dropdown-container select:focus {
+            border-color: #7c3aed;
+            box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
             outline: none;
-            border-color: #1e40af;
-            box-shadow: 0 0 5px rgba(30, 64, 175, 0.5);
         }
+
         .dropdown-container select option {
-            background-color: #ffffff;
+            background: #ffffff;
             color: #1f2937;
         }
+
+        /* Footer Styling */
         .footer {
             text-align: center;
-            padding: 10px;
+            padding: 15px;
             font-size: 0.9rem;
             color: #6b7280;
             width: 100%;
-            background-color: #f3f4f6;
-            margin-top: 0;
+            background: rgba(255, 255, 255, 0.9);
+            border-top: 1px solid #e5e7eb;
         }
+
+        /* Responsive Design */
         @media screen and (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+
+            .ad-space {
+                height: 150px;
+            }
+
             .dropdown-container {
                 flex-direction: column;
                 align-items: center;
             }
+
             .dropdown-container label {
-                margin-right: 0;
                 margin-bottom: 5px;
             }
+
             .dropdown-container select {
                 width: 100%;
                 max-width: 300px;
+            }
+
+            h1 {
+                font-size: 1.6rem;
+            }
+
+            .brand {
+                font-size: 2rem;
             }
         }
     </style>
@@ -215,8 +262,8 @@
         </div>
     </div>
     <div class="container">
-         <p style="font-family: Comic Sans MS; font-size: 30px; font-style: bold; color: rgb(15, 232, 58);">Muvin Star</p>
-        <h1> Online FM Radio 📻</h1>
+        <p class="brand">Muvin Star</p>
+        <h1>Online FM Radio 📻</h1>
         <div class="dropdown-container">
             <label for="languageSelect">Select Language: 🌐</label>
             <select id="languageSelect">
@@ -242,8 +289,40 @@
     <div class="footer">
         &copy; 2025 Mr. S. Oyyathevan | All Rights Reserved 🛡️
     </div>
-    <script>
-        // Sample language and station data (replace with your actual data)
+    <script type="text/javascript">
+        // Unchanged XLSX-related code
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+            return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                try {
+                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                    var firstSheetName = workbook.SheetNames[0];
+                    var worksheet = workbook.Sheets[firstSheetName];
+                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                    var filteredData = jsonData.filter(row => row.some(filledCell));
+                    var headerRowIndex = filteredData.findIndex((row, index) =>
+                        row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                    );
+                    if (headerRowIndex === -1 || headerRowIndex > 25) {
+                        headerRowIndex = 0;
+                    }
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                    return csv;
+                } catch (e) {
+                    console.error(e);
+                    return "";
+                }
+            }
+            return gk_fileData[filename] || "";
+        }
+
+        // Sample language and station data (unchanged)
         const languages = [
             {
                 name: "English 🏴󠁧󠁢󠁥󠁮󠁧󠁿",
@@ -260,25 +339,25 @@
                 ]
             },
             {
-                name: "Tamil 🌴",
+                name: "Tamil 🛕",
                 stations: [
-                { name: "Kodai City FM", url: "https://strw3.openstream.co/786?aw_0_1st.collectionid%3D6812%26stationId%3D6812%26publisherId%3D810%26k%3D1757253843" },
-            { name: "Suryan FM 93.5", url: "https://radios.crabdance.com:8002/2" },
-            { name: "Radio Mirchi Tamil FM 98.3", url: "https://radios.crabdance.com:8002/1" },
-            { name: "Hello FM 106.4", url: "https://radios.crabdance.com:8002/3" },
-             { name: "Vaigai FM ", url: "https://cast1.my-control-panel.com/proxy/geethan3/stream" },
-             { name: "THENI FM", url: "https://server1.mahamediacast.com/proxy/thenifm/stream" },
-             { name: "Big FM", url: "https://radios.crabdance.com:8002/4" },
-              { name: "Tamil FM 89.4 Online Radio", url: "https://centova.aarenworld.com/proxy/894tamilfm/stream" }, 
-             { name: "American Tamil Radio", url: "https://cp11.serverse.com/proxy/hgsmgluv/stream" },
-             { name: "Thenral World Radio", url: "https://thenralw.radioca.st/LiveStream" },
-             { name: "Inbathamil Oli", url: "https://usa7.fastcast4u.com/proxy/ozmediae?mp=/1" },
-             { name: "Radio Vaanam", url: "https://sathees.radioca.st/;stream.mp3" },
-             { name: "Ilayaraja FM", url: "https://stream-160.zeno.fm/pwm9y3eud5zuv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJwd205eTNldWQ1enV2IiwiaG9zdCI6InN0cmVhbS0xNjAuemVuby5mbSIsInJ0dGwiOjUsImp0aSI6InplMWNybjA4U2ktakRyUDhCZHp0NlEiLCJpYXQiOjE3NTczNDA2NDIsImV4cCI6MTc1NzM0MDcwMn0.6sMRXJBVlPNuA1s51ElGyht6yTtOpYGP0mv2qrh-zko" },
-            { name: "I Tamil Media FM", url: "https://streams.radio.co/s937ac5492/listen" },   
-           { name: "Vanavil FM 2", url: "https://s7.yesstreaming.net:8060/stream" }, 
-           { name: "OM Radio", url: "https://25053.live.streamtheworld.com/OMRADIO_S01AAC_SC" }, 
-           { name: "Time FM Radio", url: "https://neramfm.com:8000/stream" }
+                    { name: "Kodai City FM", url: "https://strw3.openstream.co/786?aw_0_1st.collectionid%3D6812%26stationId%3D6812%26publisherId%3D810%26k%3D1757253843" },
+                    { name: "Suryan FM 93.5", url: "https://radios.crabdance.com:8002/2" },
+                    { name: "Radio Mirchi Tamil FM 98.3", url: "https://radios.crabdance.com:8002/1" },
+                    { name: "Hello FM 106.4", url: "https://radios.crabdance.com:8002/3" },
+                    { name: "Vaigai FM ", url: "https://cast1.my-control-panel.com/proxy/geethan3/stream" },
+                    { name: "THENI FM", url: "https://server1.mahamediacast.com/proxy/thenifm/stream" },
+                    { name: "Big FM", url: "https://radios.crabdance.com:8002/4" },
+                    { name: "Tamil FM 89.4 Online Radio", url: "https://centova.aarenworld.com/proxy/894tamilfm/stream" }, 
+                    { name: "American Tamil Radio", url: "https://cp11.serverse.com/proxy/hgsmgluv/stream" },
+                    { name: "Thenral World Radio", url: "https://thenralw.radioca.st/LiveStream" },
+                    { name: "Inbathamil Oli", url: "https://usa7.fastcast4u.com/proxy/ozmediae?mp=/1" },
+                    { name: "Radio Vaanam", url: "https://sathees.radioca.st/;stream.mp3" },
+                    { name: "Ilayaraja FM", url: "https://stream-160.zeno.fm/pwm9y3eud5zuv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJwd205eTNldWQ1enV2IiwiaG9zdCI6InN0cmVhbS0xNjAuemVuby5mbSIsInJ0dGwiOjUsImp0aSI6InplMWNybjA4U2ktakRyUDhCZHp0NlEiLCJpYXQiOjE3NTczNDA2NDIsImV4cCI6MTc1NzM0MDcwMn0.6sMRXJBVlPNuA1s51ElGyht6yTtOpYGP0mv2qrh-zko" },
+                    { name: "I Tamil Media FM", url: "https://streams.radio.co/s937ac5492/listen" },   
+                    { name: "Vanavil FM 2", url: "https://s7.yesstreaming.net:8060/stream" }, 
+                    { name: "OM Radio", url: "https://25053.live.streamtheworld.com/OMRADIO_S01AAC_SC" }, 
+                    { name: "Time FM Radio", url: "https://neramfm.com:8000/stream" }
                 ]
             }
         ];
@@ -287,7 +366,13 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('Service Worker Registered'))
+                    .then(reg => {
+                        console.log('Service Worker Registered');
+                        navigator.serviceWorker.addEventListener('message', (event) => {
+                            console.log('Received message from service worker:', event.data);
+                            ensurePlaybackContinues();
+                        });
+                    })
                     .catch(err => console.log('Service Worker Error:', err));
             });
         }
@@ -296,7 +381,7 @@
         const adCarousel = document.getElementById('adCarousel');
         const adItems = document.getElementsByClassName('ad-item');
         let currentAdIndex = 0;
-        const adInterval = 5000; // 5 seconds
+        const adInterval = 5000;
 
         function showNextAd() {
             currentAdIndex = (currentAdIndex + 1) % adItems.length;
@@ -313,7 +398,17 @@
         const languageSelect = document.getElementById('languageSelect');
         const stationSelect = document.getElementById('stationSelect');
 
-        // Populate language dropdown
+        let isPlaying = false;
+
+        function ensurePlaybackContinues() {
+            if (isPlaying && player.paused && audioSource.src) {
+                player.play().catch(err => {
+                    console.error('Playback resumption failed:', err);
+                    offlineMessage.style.display = 'block';
+                });
+            }
+        }
+
         function populateLanguageDropdown() {
             languages.forEach((language, index) => {
                 const option = document.createElement('option');
@@ -323,7 +418,6 @@
             });
         }
 
-        // Populate station dropdown based on selected language
         function populateStationDropdown(languageIndex) {
             stationSelect.innerHTML = '<option value="">Select a station 🎧</option>';
             const language = languages[languageIndex];
@@ -337,7 +431,6 @@
             stationSelect.style.display = 'block';
         }
 
-        // Select language
         languageSelect.addEventListener('change', () => {
             const languageIndex = languageSelect.value;
             if (languageIndex !== '') {
@@ -347,12 +440,12 @@
                 audioSource.src = '';
                 player.load();
                 player.pause();
+                isPlaying = false;
             } else {
                 stationSelect.style.display = 'none';
             }
         });
 
-        // Select and play a station
         stationSelect.addEventListener('change', () => {
             const languageIndex = languageSelect.value;
             const stationIndex = stationSelect.value;
@@ -365,30 +458,53 @@
             }
         });
 
-        // Play/Pause toggle
         function togglePlay() {
             if (player.paused) {
                 player.play().catch(err => {
                     console.error('Playback failed:', err);
                     offlineMessage.style.display = 'block';
                 });
+                isPlaying = true;
             } else {
                 player.pause();
+                isPlaying = false;
             }
         }
 
-        // Handle Online/Offline Status
         function updateOfflineStatus() {
             offlineMessage.style.display = navigator.onLine ? 'none' : 'block';
+            if (navigator.onLine && isPlaying && player.paused && audioSource.src) {
+                ensurePlaybackContinues();
+            }
         }
+
+        player.addEventListener('pause', () => {
+            if (isPlaying && audioSource.src) {
+                console.log('Unexpected pause detected, attempting to resume...');
+                setTimeout(ensurePlaybackContinues, 100);
+            }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && isPlaying && player.paused && audioSource.src) {
+                ensurePlaybackContinues();
+            }
+        });
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                console.log('Notification received:', event.data);
+                ensurePlaybackContinues();
+            });
+        }
+
+        window.addEventListener('focus', ensurePlaybackContinues);
+        window.addEventListener('blur', () => {});
 
         window.addEventListener('online', updateOfflineStatus);
         window.addEventListener('offline', updateOfflineStatus);
-
-        // Initialize offline status on page load
         window.addEventListener('load', updateOfflineStatus);
 
-        // Initialize
         populateLanguageDropdown();
     </script>
 </body>
