@@ -1,4 +1,43 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -10,8 +49,8 @@
     <link rel="icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="icon-192x192.png">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        /* Modern and vibrant styling */
         * {
             margin: 0;
             padding: 0;
@@ -37,7 +76,6 @@
             flex-grow: 1;
         }
 
-        /* Enhanced Ad Carousel */
         .ad-space {
             width: 100%;
             max-width: 450px;
@@ -76,7 +114,6 @@
             transform: scale(1.05);
         }
 
-        /* Header Styling */
         h1 {
             font-size: 2rem;
             font-weight: 700;
@@ -95,7 +132,6 @@
             letter-spacing: 1px;
         }
 
-        /* Player Card */
         .player {
             background: #ffffff;
             border-radius: 15px;
@@ -162,7 +198,6 @@
             font-weight: 500;
         }
 
-        /* Dropdown Styling */
         .dropdown-container {
             display: flex;
             flex-wrap: wrap;
@@ -206,7 +241,6 @@
             color: #1f2937;
         }
 
-        /* Footer Styling */
         .footer {
             text-align: center;
             padding: 15px;
@@ -217,7 +251,6 @@
             border-top: 1px solid #e5e7eb;
         }
 
-        /* Responsive Design */
         @media screen and (max-width: 600px) {
             .container {
                 padding: 15px;
@@ -283,7 +316,7 @@
             <div class="controls">
                 <button onclick="togglePlay()">Play/Pause ▶️⏸️</button>
             </div>
-            <p class="offline-message" id="offlineMessage">You are offline. Please check your connection. 📡</p>
+            <p class="offline-message" id="offlineMessage">You are offline or the stream is unavailable. Please check your connection or try another station. 📡</p>
         </div>
     </div>
     <div class="footer">
@@ -322,7 +355,7 @@
             return gk_fileData[filename] || "";
         }
 
-        // Sample language and station data (unchanged)
+        // Sample language and station data
         const languages = [
             {
                 name: "English 🏴󠁧󠁢󠁥󠁮󠁧󠁿",
@@ -336,6 +369,14 @@
                 stations: [
                     { name: "Hindi FM 1 🎶", url: "YOUR_HINDI_STREAM_URL_1_HERE" },
                     { name: "Hindi FM 2 🎶", url: "YOUR_HINDI_STREAM_URL_2_HERE" }
+                ]
+            },
+            {
+                name: "News Channel 📺",
+                stations: [
+                    { name: "Polimer News 🎶", url: "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/polimernews_nim_https/110322/polimernews/playlist.m3u8" },
+                    { name: "News18 Tamil 🎶", url: "https://nw18live.cdn.jio.com/bpk-tv/News18_Tamil_Nadu_NW18_MOB/output01/index.m3u8" },
+                    { name: "Sun News 🎶", url: "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/news7_nim_https/240122/news7/playlist.m3u8" }
                 ]
             },
             {
@@ -397,15 +438,24 @@
         const stationNameDisplay = document.getElementById('stationName');
         const languageSelect = document.getElementById('languageSelect');
         const stationSelect = document.getElementById('stationSelect');
-
+        let hls = null;
         let isPlaying = false;
 
         function ensurePlaybackContinues() {
-            if (isPlaying && player.paused && audioSource.src) {
-                player.play().catch(err => {
-                    console.error('Playback resumption failed:', err);
-                    offlineMessage.style.display = 'block';
-                });
+            if (isPlaying && player.paused && (audioSource.src || (hls && hls.url))) {
+                console.log('Attempting to resume playback for:', stationNameDisplay.textContent);
+                if (hls && hls.url) {
+                    hls.startLoad();
+                    player.play().catch(err => {
+                        console.error('HLS playback resumption failed:', err, 'URL:', hls.url);
+                        offlineMessage.style.display = 'block';
+                    });
+                } else {
+                    player.play().catch(err => {
+                        console.error('Native playback resumption failed:', err, 'URL:', audioSource.src);
+                        offlineMessage.style.display = 'block';
+                    });
+                }
             }
         }
 
@@ -438,9 +488,14 @@
                 stationSelect.value = '';
                 stationNameDisplay.textContent = 'Select a station 🎧';
                 audioSource.src = '';
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
                 player.load();
                 player.pause();
                 isPlaying = false;
+                offlineMessage.style.display = 'none';
             } else {
                 stationSelect.style.display = 'none';
             }
@@ -451,21 +506,54 @@
             const stationIndex = stationSelect.value;
             if (stationIndex !== '') {
                 const station = languages[languageIndex].stations[stationIndex];
-                audioSource.src = station.url;
+                console.log('Selected station:', station.name, 'URL:', station.url);
                 stationNameDisplay.textContent = station.name;
+                offlineMessage.style.display = 'none';
+
+                // Reset previous playback
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
+                player.pause();
+                audioSource.src = '';
                 player.load();
-                togglePlay();
+
+                // Check if the URL is an HLS stream
+                if (station.url.endsWith('.m3u8') && Hls.isSupported()) {
+                    console.log('Using HLS for:', station.url);
+                    hls = new Hls();
+                    hls.loadSource(station.url);
+                    hls.attachMedia(player);
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        console.log('HLS manifest parsed, starting playback');
+                        togglePlay();
+                    });
+                    hls.on(Hls.Events.ERROR, (event, data) => {
+                        console.error('HLS error:', data, 'URL:', station.url);
+                        offlineMessage.style.display = 'block';
+                    });
+                } else {
+                    console.log('Using native audio for:', station.url);
+                    audioSource.src = station.url;
+                    // Try multiple MIME types for flexibility
+                    audioSource.type = station.url.includes('.aac') ? 'audio/aac' : 'audio/mpeg';
+                    player.load();
+                    togglePlay();
+                }
             }
         });
 
         function togglePlay() {
             if (player.paused) {
+                console.log('Attempting to play:', stationNameDisplay.textContent);
                 player.play().catch(err => {
-                    console.error('Playback failed:', err);
+                    console.error('Playback failed:', err, 'URL:', audioSource.src || (hls && hls.url));
                     offlineMessage.style.display = 'block';
                 });
                 isPlaying = true;
             } else {
+                console.log('Pausing:', stationNameDisplay.textContent);
                 player.pause();
                 isPlaying = false;
             }
@@ -473,20 +561,27 @@
 
         function updateOfflineStatus() {
             offlineMessage.style.display = navigator.onLine ? 'none' : 'block';
-            if (navigator.onLine && isPlaying && player.paused && audioSource.src) {
+            if (navigator.onLine && isPlaying && player.paused && (audioSource.src || (hls && hls.url))) {
+                console.log('Network restored, resuming playback');
                 ensurePlaybackContinues();
             }
         }
 
         player.addEventListener('pause', () => {
-            if (isPlaying && audioSource.src) {
+            if (isPlaying && (audioSource.src || (hls && hls.url))) {
                 console.log('Unexpected pause detected, attempting to resume...');
                 setTimeout(ensurePlaybackContinues, 100);
             }
         });
 
+        player.addEventListener('error', () => {
+            console.error('Audio element error:', player.error, 'URL:', audioSource.src || (hls && hls.url));
+            offlineMessage.style.display = 'block';
+        });
+
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && isPlaying && player.paused && audioSource.src) {
+            if (document.visibilityState === 'visible' && isPlaying && player.paused && (audioSource.src || (hls && hls.url))) {
+                console.log('Tab visible, resuming playback');
                 ensurePlaybackContinues();
             }
         });
@@ -506,6 +601,16 @@
         window.addEventListener('load', updateOfflineStatus);
 
         populateLanguageDropdown();
+
+        document.addEventListener("visibilitychange", function() {
+            if (document.hidden === false) {
+                var audio = document.querySelector("audio");
+                if (audio && audio.paused && isPlaying) {
+                    console.log('Visibility change, resuming playback');
+                    ensurePlaybackContinues();
+                }
+            }
+        });
     </script>
 </body>
 </html>
