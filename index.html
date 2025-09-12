@@ -463,48 +463,36 @@
             });
         }
 
+        function resetPlayer() {
+            // Reset the audio player completely
+            player.pause();
+            player.removeAttribute('src');
+            audioSource.removeAttribute('src');
+            audioSource.removeAttribute('type');
+            if (hls) {
+                hls.detachMedia();
+                hls.destroy();
+                hls = null;
+            }
+            player.load();
+            isPlaying = false;
+            retryCount = 0;
+            offlineMessage.style.display = 'none';
+        }
+
         function ensurePlaybackContinues() {
             if (isPlaying && player.paused && currentStationUrl) {
                 console.log('Attempting to resume playback for:', stationNameDisplay.textContent);
-                if (hls && hls.url) {
-                    hls.startLoad();
-                    player.play().catch(err => {
-                        console.error('HLS playback resumption failed:', err, 'URL:', hls.url);
-                        if (retryCount < maxRetries) {
-                            retryCount++;
-                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
-                            setTimeout(reloadStream, retryDelay);
-                        } else {
-                            offlineMessage.style.display = 'block';
-                        }
-                    });
-                } else {
-                    player.play().catch(err => {
-                        console.error('Native playback resumption failed:', err, 'URL:', audioSource.src);
-                        if (retryCount < maxRetries) {
-                            retryCount++;
-                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
-                            setTimeout(reloadStream, retryDelay);
-                        } else {
-                            offlineMessage.style.display = 'block';
-                        }
-                    });
-                }
+                reloadStream();
             }
         }
 
         function reloadStream() {
-            console.log('Reloading stream:', currentStationUrl);
-            if (hls) {
-                hls.destroy();
-                hls = null;
-            }
-            player.pause();
-            audioSource.src = '';
-            player.load();
+            console.log('Loading stream:', currentStationUrl);
+            resetPlayer(); // Ensure clean state before loading new stream
 
             if (currentStationUrl.endsWith('.m3u8') && Hls.isSupported()) {
-                console.log('Reloading HLS stream:', currentStationUrl);
+                console.log('Using HLS for:', currentStationUrl);
                 hls = new Hls({
                     autoStartLoad: true,
                     maxBufferLength: 30,
@@ -516,7 +504,7 @@
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
                     console.log('HLS manifest parsed, starting playback');
                     player.play().catch(err => {
-                        console.error('HLS playback failed after reload:', err);
+                        console.error('HLS playback failed:', err, 'URL:', currentStationUrl);
                         if (retryCount < maxRetries) {
                             retryCount++;
                             console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
@@ -528,23 +516,21 @@
                 });
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     console.error('HLS error:', data, 'URL:', currentStationUrl);
-                    if (data.fatal) {
-                        if (retryCount < maxRetries) {
-                            retryCount++;
-                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
-                            setTimeout(reloadStream, retryDelay);
-                        } else {
-                            offlineMessage.style.display = 'block';
-                        }
+                    if (data.fatal && retryCount < maxRetries) {
+                        retryCount++;
+                        console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                        setTimeout(reloadStream, retryDelay);
+                    } else if (data.fatal) {
+                        offlineMessage.style.display = 'block';
                     }
                 });
             } else {
-                console.log('Reloading native stream:', currentStationUrl);
+                console.log('Using native audio for:', currentStationUrl);
                 audioSource.src = currentStationUrl;
-                audioSource.type = currentStationUrl.includes('.aac') ? 'audio/aac' : 'audio/mpeg';
+                audioSource.type = currentStationUrl.includes('.aac') ? 'audio/aac' : currentStationUrl.includes('.mp3') ? 'audio/mpeg' : '';
                 player.load();
                 player.play().catch(err => {
-                    console.error('Native playback failed after reload:', err);
+                    console.error('Native playback failed:', err, 'URL:', currentStationUrl);
                     if (retryCount < maxRetries) {
                         retryCount++;
                         console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
@@ -584,17 +570,8 @@
                 populateStationDropdown(languageIndex);
                 stationSelect.value = '';
                 stationNameDisplay.textContent = 'Select a station 🎧';
-                audioSource.src = '';
                 currentStationUrl = '';
-                if (hls) {
-                    hls.destroy();
-                    hls = null;
-                }
-                player.load();
-                player.pause();
-                isPlaying = false;
-                offlineMessage.style.display = 'none';
-                retryCount = 0;
+                resetPlayer();
             } else {
                 stationSelect.style.display = 'none';
             }
@@ -607,9 +584,9 @@
                 const station = languages[languageIndex].stations[stationIndex];
                 console.log('Selected station:', station.name, 'URL:', station.url);
                 stationNameDisplay.textContent = station.name;
-                offlineMessage.style.display = 'none';
                 currentStationUrl = station.url;
                 retryCount = 0;
+                offlineMessage.style.display = 'none';
 
                 // Update Media Session metadata
                 if ('mediaSession' in navigator) {
@@ -623,22 +600,17 @@
                     });
                 }
 
-                // Reset previous playback
-                if (hls) {
-                    hls.destroy();
-                    hls = null;
-                }
-                player.pause();
-                audioSource.src = '';
-                player.load();
-
                 // Load new stream
                 reloadStream();
+            } else {
+                resetPlayer();
+                stationNameDisplay.textContent = 'Select a station 🎧';
+                currentStationUrl = '';
             }
         });
 
         function togglePlay() {
-            if (player.paused) {
+            if (player.paused && currentStationUrl) {
                 console.log('Attempting to play:', stationNameDisplay.textContent);
                 player.play().catch(err => {
                     console.error('Playback failed:', err, 'URL:', currentStationUrl);
