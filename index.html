@@ -1,0 +1,708 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="description" content="Online FM Radio with live streaming">
+    <title>Online FM Radio 📻</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            color: #1f2937;
+            overflow-x: hidden;
+        }
+
+        .container {
+            text-align: center;
+            padding: 20px;
+            max-width: 450px;
+            width: 100%;
+            flex-grow: 1;
+        }
+
+        .ad-space {
+            width: 100%;
+            max-width: 450px;
+            height: 180px;
+            margin: 20px 0;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+            position: relative;
+            background: #ffffff;
+        }
+
+        .ad-carousel {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.5s ease-in-out;
+        }
+
+        .ad-item {
+            min-width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ad-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }
+
+        .ad-item img:hover {
+            transform: scale(1.05);
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1e40af;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .brand {
+            font-family: 'Poppins', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: #14b8a6;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .player {
+            background: #ffffff;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+            margin-bottom: 20px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .player:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .station-name {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 15px;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 15px;
+            border-radius: 10px;
+            outline: none;
+        }
+
+        audio::-webkit-media-controls-panel {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+
+        .controls {
+            margin-top: 20px;
+        }
+
+        button {
+            background: linear-gradient(90deg, #1e40af, #7c3aed);
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease;
+        }
+
+        button:hover {
+            background: linear-gradient(90deg, #1e3a8a, #6d28d9);
+            transform: scale(1.05);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .offline-message {
+            display: none;
+            color: #dc2626;
+            font-size: 0.9rem;
+            margin-top: 15px;
+            font-weight: 500;
+        }
+
+        .dropdown-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .dropdown-container label {
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: #1e40af;
+            line-height: 2.5;
+        }
+
+        .dropdown-container select {
+            padding: 12px;
+            font-size: 1rem;
+            border: 2px solid #1e40af;
+            border-radius: 10px;
+            background: #ffffff;
+            color: #1f2937;
+            cursor: pointer;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            width: 200px;
+            max-width: 100%;
+            appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="%231e40af" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+        }
+
+        .dropdown-container select:focus {
+            border-color: #7c3aed;
+            box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+            outline: none;
+        }
+
+        .dropdown-container select option {
+            background: #ffffff;
+            color: #1f2937;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 0.9rem;
+            color: #6b7280;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            border-top: 1px solid #e5e7eb;
+        }
+
+        @media screen and (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+
+            .ad-space {
+                height: 150px;
+            }
+
+            .dropdown-container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .dropdown-container label {
+                margin-bottom: 5px;
+            }
+
+            .dropdown-container select {
+                width: 100%;
+                max-width: 300px;
+            }
+
+            h1 {
+                font-size: 1.6rem;
+            }
+
+            .brand {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="ad-space">
+        <div class="ad-carousel" id="adCarousel">
+            <div class="ad-item"><img src="ad1.jpeg" alt="Ad 1 📢"></div>
+            <div class="ad-item"><img src="ad2.jpeg" alt="Ad 2 📢"></div>
+            <div class="ad-item"><img src="ad3.jpeg" alt="Ad 3 📢"></div>
+            <div class="ad-item"><img src="ad4.jpeg" alt="Ad 4 📢"></div>
+            <div class="ad-item"><img src="ad5.jpeg" alt="Ad 5 📢"></div>
+        </div>
+    </div>
+    <div class="container">
+        <p class="brand">Muvin Star</p>
+        <h1>Online FM Radio 📻</h1>
+        <div class="dropdown-container">
+            <label for="languageSelect">Select Language: 🌐</label>
+            <select id="languageSelect">
+                <!-- Language options will be populated by JavaScript -->
+            </select>
+            <label for="stationSelect">Select FM Station: 🎵</label>
+            <select id="stationSelect" style="display: none;">
+                <!-- Station options will be populated by JavaScript -->
+            </select>
+        </div>
+        <div class="player">
+            <div class="station-name" id="stationName">Select a station 🎧</div>
+            <audio id="radioPlayer" controls preload="auto">
+                <source id="audioSource" src="" type="audio/mpeg">
+                Your browser does not support the audio element.
+            </audio>
+            <div class="controls">
+                <button onclick="togglePlay()">Play/Pause ▶️⏸️</button>
+            </div>
+            <p class="offline-message" id="offlineMessage">You are offline or the stream is unavailable. Please check your connection or try another station. 📡</p>
+        </div>
+    </div>
+    <div class="footer">
+        &copy; 2025 Mr. S. Oyyathevan | All Rights Reserved 🛡️
+    </div>
+    <script type="text/javascript">
+        // XLSX-related code (unchanged)
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+            return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                try {
+                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                    var firstSheetName = workbook.SheetNames[0];
+                    var worksheet = workbook.Sheets[firstSheetName];
+                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                    var filteredData = jsonData.filter(row => row.some(filledCell));
+                    var headerRowIndex = filteredData.findIndex((row, index) =>
+                        row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                    );
+                    if (headerRowIndex === -1 || headerRowIndex > 25) {
+                        headerRowIndex = 0;
+                    }
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                    return csv;
+                } catch (e) {
+                    console.error(e);
+                    return "";
+                }
+            }
+            return gk_fileData[filename] || "";
+        }
+
+        // Sample language and station data
+        const languages = [
+            {
+                name: "English 🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+                stations: [
+                    { name: "English FM 1 🎶", url: "YOUR_ENGLISH_STREAM_URL_1_HERE" },
+                    { name: "English FM 2 🎶", url: "YOUR_ENGLISH_STREAM_URL_2_HERE" }
+                ]
+            },
+            {
+                name: "Hindi 🇮🇳",
+                stations: [
+                    { name: "Hindi FM 1 🎶", url: "YOUR_HINDI_STREAM_URL_1_HERE" },
+                    { name: "Hindi FM 2 🎶", url: "YOUR_HINDI_STREAM_URL_2_HERE" }
+                ]
+            },
+            {
+                name: "News Channel 📺",
+                stations: [
+                    { name: "Polimer News 🎶", url: "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/polimernews_nim_https/110322/polimernews/playlist.m3u8" },
+                    { name: "News18 Tamil 🎶", url: "https://nw18live.cdn.jio.com/bpk-tv/News18_Tamil_Nadu_NW18_MOB/output01/index.m3u8" },
+                    { name: "Sun News 🎶", url: "https://yuppmedtaorire.akamaized.net/v1/master/a0d007312bfd99c47f76b77ae26b1ccdaae76cb1/news7_nim_https/240122/news7/playlist.m3u8" }
+                ]
+            },
+            {
+                name: "Tamil 🛕",
+                stations: [
+                    { name: "Kodai City FM", url: "https://strw3.openstream.co/786?aw_0_1st.collectionid%3D6812%26stationId%3D6812%26publisherId%3D810%26k%3D1757253843" },
+                    { name: "Suryan FM 93.5", url: "https://radios.crabdance.com:8002/2" },
+                    { name: "Radio Mirchi Tamil FM 98.3", url: "https://radios.crabdance.com:8002/1" },
+                    { name: "Hello FM 106.4", url: "https://radios.crabdance.com:8002/3" },
+                    { name: "Vaigai FM ", url: "https://cast1.my-control-panel.com/proxy/geethan3/stream" },
+                    { name: "THENI FM", url: "https://server1.mahamediacast.com/proxy/thenifm/stream" },
+                    { name: "Big FM", url: "https://radios.crabdance.com:8002/4" },
+                    { name: "Tamil FM 89.4 Online Radio", url: "https://centova.aarenworld.com/proxy/894tamilfm/stream" }, 
+                    { name: "American Tamil Radio", url: "https://cp11.serverse.com/proxy/hgsmgluv/stream" },
+                    { name: "Thenral World Radio", url: "https://thenralw.radioca.st/LiveStream" },
+                    { name: "Inbathamil Oli", url: "https://usa7.fastcast4u.com/proxy/ozmediae?mp=/1" },
+                    { name: "Radio Vaanam", url: "https://sathees.radioca.st/;stream.mp3" },
+                    { name: "Ilayaraja FM", url: "https://stream-160.zeno.fm/pwm9y3eud5zuv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJwd205eTNldWQ1enV2IiwiaG9zdCI6InN0cmVhbS0xNjAuemVuby5mbSIsInJ0dGwiOjUsImp0aSI6InplMWNybjA4U2ktakRyUDhCZHp0NlEiLCJpYXQiOjE3NTczNDA2NDIsImV4cCI6MTc1NzM0MDcwMn0.6sMRXJBVlPNuA1s51ElGyht6yTtOpYGP0mv2qrh-zko" },
+                    { name: "I Tamil Media FM", url: "https://streams.radio.co/s937ac5492/listen" },   
+                    { name: "Vanavil FM 2", url: "https://s7.yesstreaming.net:8060/stream" }, 
+                    { name: "OM Radio", url: "https://25053.live.streamtheworld.com/OMRADIO_S01AAC_SC" }, 
+                    { name: "Time FM Radio", url: "https://neramfm.com:8000/stream" }
+                ]
+            }
+        ];
+
+        // Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => {
+                        console.log('Service Worker Registered');
+                    })
+                    .catch(err => console.log('Service Worker Error:', err));
+            });
+        }
+
+        // Ad Carousel
+        const adCarousel = document.getElementById('adCarousel');
+        const adItems = document.getElementsByClassName('ad-item');
+        let currentAdIndex = 0;
+        const adInterval = 5000;
+
+        function showNextAd() {
+            currentAdIndex = (currentAdIndex + 1) % adItems.length;
+            adCarousel.style.transform = `translateX(-${currentAdIndex * 100}%)`;
+        }
+
+        setInterval(showNextAd, adInterval);
+
+        // Audio Player Control
+        const player = document.getElementById('radioPlayer');
+        const audioSource = document.getElementById('audioSource');
+        const offlineMessage = document.getElementById('offlineMessage');
+        const stationNameDisplay = document.getElementById('stationName');
+        const languageSelect = document.getElementById('languageSelect');
+        const stationSelect = document.getElementById('stationSelect');
+        let hls = null;
+        let isPlaying = false;
+        let currentStationUrl = '';
+        let retryCount = 0;
+        const maxRetries = 5;
+        const retryDelay = 5000; // 5 seconds
+
+        // Media Session API for background playback and lock screen controls
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: 'Online FM Radio',
+                artist: 'Muvin Star',
+                album: 'Live Stream',
+                artwork: [
+                    { src: 'icon-192x192.png', sizes: '192x192', type: 'image/png' }
+                ]
+            });
+
+            navigator.mediaSession.setActionHandler('play', () => {
+                console.log('Media Session: Play action');
+                togglePlay();
+            });
+
+            navigator.mediaSession.setActionHandler('pause', () => {
+                console.log('Media Session: Pause action');
+                togglePlay();
+            });
+        }
+
+        function ensurePlaybackContinues() {
+            if (isPlaying && player.paused && currentStationUrl) {
+                console.log('Attempting to resume playback for:', stationNameDisplay.textContent);
+                if (hls && hls.url) {
+                    hls.startLoad();
+                    player.play().catch(err => {
+                        console.error('HLS playback resumption failed:', err, 'URL:', hls.url);
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                            setTimeout(reloadStream, retryDelay);
+                        } else {
+                            offlineMessage.style.display = 'block';
+                        }
+                    });
+                } else {
+                    player.play().catch(err => {
+                        console.error('Native playback resumption failed:', err, 'URL:', audioSource.src);
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                            setTimeout(reloadStream, retryDelay);
+                        } else {
+                            offlineMessage.style.display = 'block';
+                        }
+                    });
+                }
+            }
+        }
+
+        function reloadStream() {
+            console.log('Reloading stream:', currentStationUrl);
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+            player.pause();
+            audioSource.src = '';
+            player.load();
+
+            if (currentStationUrl.endsWith('.m3u8') && Hls.isSupported()) {
+                console.log('Reloading HLS stream:', currentStationUrl);
+                hls = new Hls({
+                    autoStartLoad: true,
+                    maxBufferLength: 30,
+                    maxMaxBufferLength: 60,
+                    backBufferLength: 0
+                });
+                hls.loadSource(currentStationUrl);
+                hls.attachMedia(player);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    console.log('HLS manifest parsed, starting playback');
+                    player.play().catch(err => {
+                        console.error('HLS playback failed after reload:', err);
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                            setTimeout(reloadStream, retryDelay);
+                        } else {
+                            offlineMessage.style.display = 'block';
+                        }
+                    });
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    console.error('HLS error:', data, 'URL:', currentStationUrl);
+                    if (data.fatal) {
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                            setTimeout(reloadStream, retryDelay);
+                        } else {
+                            offlineMessage.style.display = 'block';
+                        }
+                    }
+                });
+            } else {
+                console.log('Reloading native stream:', currentStationUrl);
+                audioSource.src = currentStationUrl;
+                audioSource.type = currentStationUrl.includes('.aac') ? 'audio/aac' : 'audio/mpeg';
+                player.load();
+                player.play().catch(err => {
+                    console.error('Native playback failed after reload:', err);
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                        setTimeout(reloadStream, retryDelay);
+                    } else {
+                        offlineMessage.style.display = 'block';
+                    }
+                });
+            }
+        }
+
+        function populateLanguageDropdown() {
+            languages.forEach((language, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = language.name;
+                languageSelect.appendChild(option);
+            });
+        }
+
+        function populateStationDropdown(languageIndex) {
+            stationSelect.innerHTML = '<option value="">Select a station 🎧</option>';
+            const language = languages[languageIndex];
+            language.stations.forEach((station, stationIndex) => {
+                const option = document.createElement('option');
+                option.value = stationIndex;
+                option.textContent = station.name;
+                option.dataset.url = station.url;
+                stationSelect.appendChild(option);
+            });
+            stationSelect.style.display = 'block';
+        }
+
+        languageSelect.addEventListener('change', () => {
+            const languageIndex = languageSelect.value;
+            if (languageIndex !== '') {
+                populateStationDropdown(languageIndex);
+                stationSelect.value = '';
+                stationNameDisplay.textContent = 'Select a station 🎧';
+                audioSource.src = '';
+                currentStationUrl = '';
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
+                player.load();
+                player.pause();
+                isPlaying = false;
+                offlineMessage.style.display = 'none';
+                retryCount = 0;
+            } else {
+                stationSelect.style.display = 'none';
+            }
+        });
+
+        stationSelect.addEventListener('change', () => {
+            const languageIndex = languageSelect.value;
+            const stationIndex = stationSelect.value;
+            if (stationIndex !== '') {
+                const station = languages[languageIndex].stations[stationIndex];
+                console.log('Selected station:', station.name, 'URL:', station.url);
+                stationNameDisplay.textContent = station.name;
+                offlineMessage.style.display = 'none';
+                currentStationUrl = station.url;
+                retryCount = 0;
+
+                // Update Media Session metadata
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: station.name,
+                        artist: 'Muvin Star',
+                        album: languages[languageIndex].name,
+                        artwork: [
+                            { src: 'icon-192x192.png', sizes: '192x192', type: 'image/png' }
+                        ]
+                    });
+                }
+
+                // Reset previous playback
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
+                player.pause();
+                audioSource.src = '';
+                player.load();
+
+                // Load new stream
+                reloadStream();
+            }
+        });
+
+        function togglePlay() {
+            if (player.paused) {
+                console.log('Attempting to play:', stationNameDisplay.textContent);
+                player.play().catch(err => {
+                    console.error('Playback failed:', err, 'URL:', currentStationUrl);
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                        setTimeout(reloadStream, retryDelay);
+                    } else {
+                        offlineMessage.style.display = 'block';
+                    }
+                });
+                isPlaying = true;
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.playbackState = 'playing';
+                }
+            } else {
+                console.log('Pausing:', stationNameDisplay.textContent);
+                player.pause();
+                isPlaying = false;
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.playbackState = 'paused';
+                }
+            }
+        }
+
+        function updateOfflineStatus() {
+            offlineMessage.style.display = navigator.onLine ? 'none' : 'block';
+            if (navigator.onLine && isPlaying && player.paused && currentStationUrl) {
+                console.log('Network restored, resuming playback');
+                ensurePlaybackContinues();
+            }
+        }
+
+        player.addEventListener('pause', () => {
+            if (isPlaying && currentStationUrl) {
+                console.log('Unexpected pause detected, attempting to resume...');
+                setTimeout(ensurePlaybackContinues, 100);
+            }
+        });
+
+        player.addEventListener('error', () => {
+            console.error('Audio element error:', player.error, 'URL:', currentStationUrl);
+            if (isPlaying && retryCount < maxRetries) {
+                retryCount++;
+                console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                setTimeout(reloadStream, retryDelay);
+            } else {
+                offlineMessage.style.display = 'block';
+            }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && isPlaying && player.paused && currentStationUrl) {
+                console.log('Tab visible, resuming playback');
+                ensurePlaybackContinues();
+            }
+        });
+
+        window.addEventListener('online', updateOfflineStatus);
+        window.addEventListener('offline', updateOfflineStatus);
+        window.addEventListener('load', () => {
+            updateOfflineStatus();
+            populateLanguageDropdown();
+        });
+    </script>
+</body>
+</html>

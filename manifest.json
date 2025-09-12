@@ -1,9 +1,11 @@
 {
-    "name": "Online FM Radio",
+    "name": "Muvin Star Online FM Radio",
     "short_name": "FM Radio",
     "start_url": "/index.html",
     "display": "standalone",
+    "background": { "persistent": true },
     "background_color": "#f3f4f6",
+    
     "theme_color": "#1e40af",
     "icons": [
         {
