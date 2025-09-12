@@ -309,7 +309,7 @@
         </div>
         <div class="player">
             <div class="station-name" id="stationName">Select a station 🎧</div>
-            <audio id="radioPlayer" controls>
+            <audio id="radioPlayer" controls preload="auto">
                 <source id="audioSource" src="" type="audio/mpeg">
                 Your browser does not support the audio element.
             </audio>
@@ -323,7 +323,7 @@
         &copy; 2025 Mr. S. Oyyathevan | All Rights Reserved 🛡️
     </div>
     <script type="text/javascript">
-        // Unchanged XLSX-related code
+        // XLSX-related code (unchanged)
         var gk_isXlsx = false;
         var gk_xlsxFileLookup = {};
         var gk_fileData = {};
@@ -409,10 +409,6 @@
                 navigator.serviceWorker.register('sw.js')
                     .then(reg => {
                         console.log('Service Worker Registered');
-                        navigator.serviceWorker.addEventListener('message', (event) => {
-                            console.log('Received message from service worker:', event.data);
-                            ensurePlaybackContinues();
-                        });
                     })
                     .catch(err => console.log('Service Worker Error:', err));
             });
@@ -440,22 +436,123 @@
         const stationSelect = document.getElementById('stationSelect');
         let hls = null;
         let isPlaying = false;
+        let currentStationUrl = '';
+        let retryCount = 0;
+        const maxRetries = 5;
+        const retryDelay = 5000; // 5 seconds
+
+        // Media Session API for background playback and lock screen controls
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: 'Online FM Radio',
+                artist: 'Muvin Star',
+                album: 'Live Stream',
+                artwork: [
+                    { src: 'icon-192x192.png', sizes: '192x192', type: 'image/png' }
+                ]
+            });
+
+            navigator.mediaSession.setActionHandler('play', () => {
+                console.log('Media Session: Play action');
+                togglePlay();
+            });
+
+            navigator.mediaSession.setActionHandler('pause', () => {
+                console.log('Media Session: Pause action');
+                togglePlay();
+            });
+        }
 
         function ensurePlaybackContinues() {
-            if (isPlaying && player.paused && (audioSource.src || (hls && hls.url))) {
+            if (isPlaying && player.paused && currentStationUrl) {
                 console.log('Attempting to resume playback for:', stationNameDisplay.textContent);
                 if (hls && hls.url) {
                     hls.startLoad();
                     player.play().catch(err => {
                         console.error('HLS playback resumption failed:', err, 'URL:', hls.url);
-                        offlineMessage.style.display = 'block';
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                            setTimeout(reloadStream, retryDelay);
+                        } else {
+                            offlineMessage.style.display = 'block';
+                        }
                     });
                 } else {
                     player.play().catch(err => {
                         console.error('Native playback resumption failed:', err, 'URL:', audioSource.src);
-                        offlineMessage.style.display = 'block';
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                            setTimeout(reloadStream, retryDelay);
+                        } else {
+                            offlineMessage.style.display = 'block';
+                        }
                     });
                 }
+            }
+        }
+
+        function reloadStream() {
+            console.log('Reloading stream:', currentStationUrl);
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+            player.pause();
+            audioSource.src = '';
+            player.load();
+
+            if (currentStationUrl.endsWith('.m3u8') && Hls.isSupported()) {
+                console.log('Reloading HLS stream:', currentStationUrl);
+                hls = new Hls({
+                    autoStartLoad: true,
+                    maxBufferLength: 30,
+                    maxMaxBufferLength: 60,
+                    backBufferLength: 0
+                });
+                hls.loadSource(currentStationUrl);
+                hls.attachMedia(player);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    console.log('HLS manifest parsed, starting playback');
+                    player.play().catch(err => {
+                        console.error('HLS playback failed after reload:', err);
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                            setTimeout(reloadStream, retryDelay);
+                        } else {
+                            offlineMessage.style.display = 'block';
+                        }
+                    });
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    console.error('HLS error:', data, 'URL:', currentStationUrl);
+                    if (data.fatal) {
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                            setTimeout(reloadStream, retryDelay);
+                        } else {
+                            offlineMessage.style.display = 'block';
+                        }
+                    }
+                });
+            } else {
+                console.log('Reloading native stream:', currentStationUrl);
+                audioSource.src = currentStationUrl;
+                audioSource.type = currentStationUrl.includes('.aac') ? 'audio/aac' : 'audio/mpeg';
+                player.load();
+                player.play().catch(err => {
+                    console.error('Native playback failed after reload:', err);
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                        setTimeout(reloadStream, retryDelay);
+                    } else {
+                        offlineMessage.style.display = 'block';
+                    }
+                });
             }
         }
 
@@ -488,6 +585,7 @@
                 stationSelect.value = '';
                 stationNameDisplay.textContent = 'Select a station 🎧';
                 audioSource.src = '';
+                currentStationUrl = '';
                 if (hls) {
                     hls.destroy();
                     hls = null;
@@ -496,6 +594,7 @@
                 player.pause();
                 isPlaying = false;
                 offlineMessage.style.display = 'none';
+                retryCount = 0;
             } else {
                 stationSelect.style.display = 'none';
             }
@@ -509,6 +608,20 @@
                 console.log('Selected station:', station.name, 'URL:', station.url);
                 stationNameDisplay.textContent = station.name;
                 offlineMessage.style.display = 'none';
+                currentStationUrl = station.url;
+                retryCount = 0;
+
+                // Update Media Session metadata
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: station.name,
+                        artist: 'Muvin Star',
+                        album: languages[languageIndex].name,
+                        artwork: [
+                            { src: 'icon-192x192.png', sizes: '192x192', type: 'image/png' }
+                        ]
+                    });
+                }
 
                 // Reset previous playback
                 if (hls) {
@@ -519,28 +632,8 @@
                 audioSource.src = '';
                 player.load();
 
-                // Check if the URL is an HLS stream
-                if (station.url.endsWith('.m3u8') && Hls.isSupported()) {
-                    console.log('Using HLS for:', station.url);
-                    hls = new Hls();
-                    hls.loadSource(station.url);
-                    hls.attachMedia(player);
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                        console.log('HLS manifest parsed, starting playback');
-                        togglePlay();
-                    });
-                    hls.on(Hls.Events.ERROR, (event, data) => {
-                        console.error('HLS error:', data, 'URL:', station.url);
-                        offlineMessage.style.display = 'block';
-                    });
-                } else {
-                    console.log('Using native audio for:', station.url);
-                    audioSource.src = station.url;
-                    // Try multiple MIME types for flexibility
-                    audioSource.type = station.url.includes('.aac') ? 'audio/aac' : 'audio/mpeg';
-                    player.load();
-                    togglePlay();
-                }
+                // Load new stream
+                reloadStream();
             }
         });
 
@@ -548,68 +641,67 @@
             if (player.paused) {
                 console.log('Attempting to play:', stationNameDisplay.textContent);
                 player.play().catch(err => {
-                    console.error('Playback failed:', err, 'URL:', audioSource.src || (hls && hls.url));
-                    offlineMessage.style.display = 'block';
+                    console.error('Playback failed:', err, 'URL:', currentStationUrl);
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                        setTimeout(reloadStream, retryDelay);
+                    } else {
+                        offlineMessage.style.display = 'block';
+                    }
                 });
                 isPlaying = true;
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.playbackState = 'playing';
+                }
             } else {
                 console.log('Pausing:', stationNameDisplay.textContent);
                 player.pause();
                 isPlaying = false;
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.playbackState = 'paused';
+                }
             }
         }
 
         function updateOfflineStatus() {
             offlineMessage.style.display = navigator.onLine ? 'none' : 'block';
-            if (navigator.onLine && isPlaying && player.paused && (audioSource.src || (hls && hls.url))) {
+            if (navigator.onLine && isPlaying && player.paused && currentStationUrl) {
                 console.log('Network restored, resuming playback');
                 ensurePlaybackContinues();
             }
         }
 
         player.addEventListener('pause', () => {
-            if (isPlaying && (audioSource.src || (hls && hls.url))) {
+            if (isPlaying && currentStationUrl) {
                 console.log('Unexpected pause detected, attempting to resume...');
                 setTimeout(ensurePlaybackContinues, 100);
             }
         });
 
         player.addEventListener('error', () => {
-            console.error('Audio element error:', player.error, 'URL:', audioSource.src || (hls && hls.url));
-            offlineMessage.style.display = 'block';
+            console.error('Audio element error:', player.error, 'URL:', currentStationUrl);
+            if (isPlaying && retryCount < maxRetries) {
+                retryCount++;
+                console.log(`Retrying (${retryCount}/${maxRetries}) in ${retryDelay}ms`);
+                setTimeout(reloadStream, retryDelay);
+            } else {
+                offlineMessage.style.display = 'block';
+            }
         });
 
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && isPlaying && player.paused && (audioSource.src || (hls && hls.url))) {
+            if (document.visibilityState === 'visible' && isPlaying && player.paused && currentStationUrl) {
                 console.log('Tab visible, resuming playback');
                 ensurePlaybackContinues();
             }
         });
 
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.addEventListener('message', (event) => {
-                console.log('Notification received:', event.data);
-                ensurePlaybackContinues();
-            });
-        }
-
-        window.addEventListener('focus', ensurePlaybackContinues);
-        window.addEventListener('blur', () => {});
-
         window.addEventListener('online', updateOfflineStatus);
         window.addEventListener('offline', updateOfflineStatus);
-        window.addEventListener('load', updateOfflineStatus);
-
-        populateLanguageDropdown();
-
-        document.addEventListener("visibilitychange", function() {
-            if (document.hidden === false) {
-                var audio = document.querySelector("audio");
-                if (audio && audio.paused && isPlaying) {
-                    console.log('Visibility change, resuming playback');
-                    ensurePlaybackContinues();
-                }
-            }
+        window.addEventListener('load', () => {
+            updateOfflineStatus();
+            populateLanguageDropdown();
         });
     </script>
 </body>
